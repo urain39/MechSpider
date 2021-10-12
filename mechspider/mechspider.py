@@ -65,10 +65,10 @@ class MechSpider:
         break
 
   def start(self):
-    if hasattr(self, 'FirstPage'):
-      self.browser.open(self.FirstPage)
+    if hasattr(self, 'HomePage'):
+      self.browser.open(self.HomePage)
     else:
-      raise _PropertyMissingError('FirstPage missing')
+      raise _PropertyMissingError('HomePage missing')
 
     random_visit = self.RandomVist \
       if hasattr(self, 'RandomVist') else False
