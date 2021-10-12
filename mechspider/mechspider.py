@@ -18,6 +18,10 @@ class MechSpider:
   def __init__(self):
     self.visit_queue = []
     self.browser = _Browser()
+    self.browser.set_handle_equiv(True)
+    self.browser.set_handle_gzip(True)
+    self.browser.set_handle_redirect(True)
+    self.browser.set_handle_referer(True)
     if hasattr(self, 'UserAgent'):
       self.browser.set_header('User-Agent', self.UserAgent)
     if hasattr(self, 'HandleRobots'):
