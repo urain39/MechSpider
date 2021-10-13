@@ -29,6 +29,9 @@ class MechSpider:
     if hasattr(self, 'HANDLE_ROBOTS'):
       self.browser.set_handle_robots(self.HANDLE_ROBOTS)
 
+    # Make first `follow_link()` works
+    self.browser.set_html('', url='file:///usr/share/MechSpider/www/mainpage.html')
+
     self.home_page = self.HOME_PAGE \
       if hasattr(self, 'HOME_PAGE') else None
 
@@ -58,7 +61,7 @@ class MechSpider:
     return _
 
   @staticmethod
-  def _detect_encoding(response, max_line_count=64):
+  def detect_encoding(response, max_line_count=64):
     response.seek(0, whence=0)
     _CharsetDetector.reset()
 
@@ -73,6 +76,7 @@ class MechSpider:
 
   @staticmethod
   def url_to_link(url):
+    # XXX: is that safe?
     return _Link(url, '', '', 'a', {})
 
   def visit(self, link):
@@ -85,7 +89,7 @@ class MechSpider:
         callback = self.Patterns[pattern]
         # pylint: disable=assignment-from-none
         response = self.browser.follow_link(link)  # WTF? x2
-        encoding = self._detect_encoding(response)
+        encoding = self.detect_encoding(response)
         markup = response.get_data().decode(encoding)
         soup = Soup(markup=markup)
         callback(soup, self)
@@ -95,7 +99,6 @@ class MechSpider:
 
         self.visited_count += 1
         if self.visited_count > self.max_visit_count:
-          # XXX: support random back because `self.random_visit`?
           back_step = _randrange(0, self.max_visit_count)
           self.browser.back(back_step)
           self.visited_count -= back_step
@@ -104,7 +107,8 @@ class MechSpider:
   def start(self):
     if self.home_page is None:
       raise _PropertyMissingError('HOME_PAGE missing')
-    self.browser.open(self.home_page)
+    link = self.url_to_link(self.home_page)
+    self.visit(link)
 
     if self.random_visit:
       while True:
