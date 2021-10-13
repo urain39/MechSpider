@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup as _Soup
 from chardet.universaldetector import UniversalDetector as _UniversalDetector
 from mechanize import Browser as _Browser, Link as _Link
 from random import random as _random, randrange as _randrange
+from urllib.parse import urlparse as _urlparse
 from .exceptions import PropertyMissingError as _PropertyMissingError
 
 
@@ -75,9 +76,14 @@ class MechSpider:
     return _CharsetDetector.result['encoding']
 
   @staticmethod
-  def url_to_link(url):
-    # XXX: is that safe?
-    return _Link(base_url=url, url='', text='', tag='a', attrs=[])
+  def is_absolute_url(url):
+    result = _urlparse(url)
+    return bool(result.scheme) and bool(result.netloc)
+
+  @classmethod
+  def url_to_link(cls, url):
+    assert cls.is_absolute_url(url)
+    return _Link(base_url=url, url='', text='', tag='a', attrs=[('href', '')])
 
   def visit(self, link):
     if isinstance(link, str):
