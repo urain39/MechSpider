@@ -1,8 +1,9 @@
 import re as _re
+import time as _time
 from bs4 import BeautifulSoup as _Soup
 from chardet.universaldetector import UniversalDetector as _UniversalDetector
-from mechanize import Browser as _Browser
-from random import randrange as _randrange
+from mechanize import Browser as _Browser, Link as _Link
+from random import random as _random, randrange as _randrange
 from .exceptions import PropertyMissingError as _PropertyMissingError
 
 
@@ -14,6 +15,7 @@ def Soup(*args, **kwargs):
   return _Soup(*args, features='html5lib', **kwargs)
 
 
+# pylint: disable=too-many-instance-attributes
 class MechSpider:
   def __init__(self):
     self.visit_queue = []
@@ -22,10 +24,25 @@ class MechSpider:
     self.browser.set_handle_gzip(True)
     self.browser.set_handle_redirect(True)
     self.browser.set_handle_referer(True)
-    if hasattr(self, 'UserAgent'):
-      self.browser.set_header('User-Agent', self.UserAgent)
-    if hasattr(self, 'HandleRobots'):
-      self.browser.set_handle_robots(self.HandleRobots)
+    if hasattr(self, 'USER_AGENT'):
+      self.browser.set_header('User-Agent', self.USER_AGENT)
+    if hasattr(self, 'HANDLE_ROBOTS'):
+      self.browser.set_handle_robots(self.HANDLE_ROBOTS)
+
+    self.home_page = self.HOME_PAGE \
+      if hasattr(self, 'HOME_PAGE') else None
+
+    self.max_visit_count = self.MAX_VISIT_COUNT \
+      if hasattr(self, 'MAX_VISIT_COUNT') else 0xffff
+    self.visited_count = 0
+
+    self.random_visit = self.RANDOM_VISIT \
+      if hasattr(self, 'RANDOM_VISIT') else False
+
+    self.random_wait = self.RANDOM_WAIT \
+      if hasattr(self, 'RANDOM_WAIT') else False
+    self.random_wait_factor = self.RANDOM_WAIT_FACTOR \
+      if hasattr(self, 'RANDOM_WAIT_FACTOR') else 1
 
   @classmethod
   # pylint: disable=unused-argument
@@ -41,12 +58,12 @@ class MechSpider:
     return _
 
   @staticmethod
-  def _detect_encoding(response, max_line_count=128):
+  def _detect_encoding(response, max_line_count=64):
     response.seek(0, whence=0)
     _CharsetDetector.reset()
 
-    line_count = 1
-    while line_count <= max_line_count:
+    line_count = 0
+    while line_count < max_line_count:
       _CharsetDetector.feed(response.readline())
       if _CharsetDetector.done:
         break
@@ -54,43 +71,55 @@ class MechSpider:
     _CharsetDetector.close()
     return _CharsetDetector.result['encoding']
 
-  def _visit(self, url):
+  @staticmethod
+  def url_to_link(url):
+    return _Link(url, '', '', 'a', {})
+
+  def visit(self, link):
+    if isinstance(link, str):
+      link = self.url_to_link(link)
+
     # pylint: disable=consider-using-dict-items
     for pattern in self.Patterns:
-      if pattern.match(url) is not None:
-        #print(url + ' wanted by ' + str(pattern))
+      if pattern.match(link.absolute_url) is not None:
         callback = self.Patterns[pattern]
         # pylint: disable=assignment-from-none
-        response = self.browser.open(url) # WTF? x2
+        response = self.browser.follow_link(link)  # WTF? x2
         encoding = self._detect_encoding(response)
         markup = response.get_data().decode(encoding)
         soup = Soup(markup=markup)
         callback(soup, self)
+
+        if self.random_wait:
+          _time.sleep(self.random_wait_factor * _random())
+
+        self.visited_count += 1
+        if self.visited_count > self.max_visit_count:
+          # XXX: support random back because `self.random_visit`?
+          back_step = _randrange(0, self.max_visit_count)
+          self.browser.back(back_step)
+          self.visited_count -= back_step
         break
 
   def start(self):
-    if hasattr(self, 'HomePage'):
-      self.browser.open(self.HomePage)
-    else:
-      raise _PropertyMissingError('HomePage missing')
+    if self.home_page is None:
+      raise _PropertyMissingError('HOME_PAGE missing')
+    self.browser.open(self.home_page)
 
-    random_visit = self.RandomVist \
-      if hasattr(self, 'RandomVist') else False
-
-    if random_visit:
+    if self.random_visit:
       while True:
         length = len(self.visit_queue)
         if length < 1:
           break
 
         index = _randrange(0, length)
-        url = self.visit_queue.pop(index)
-        self._visit(url)
+        link = self.visit_queue.pop(index)
+        self.visit(link)
     else:
       while True:
         length = len(self.visit_queue)
         if length < 1:
           break
 
-        url = self.visit_queue.pop()
-        self._visit(url)
+        link = self.visit_queue.pop()
+        self.visit(link)
