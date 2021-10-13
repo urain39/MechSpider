@@ -77,7 +77,7 @@ class MechSpider:
   @staticmethod
   def url_to_link(url):
     # XXX: is that safe?
-    return _Link(url, '', '', 'a', {})
+    return _Link(base_url=url, url='', text='', tag='a', attrs=[])
 
   def visit(self, link):
     if isinstance(link, str):
