@@ -17,8 +17,7 @@ VISITED_COUNT = 0
 def _(spider, soup):
   print(soup.text)
   print(spider._visit_groups)
-  group = spider.create_group()
-  group.method = group.VISIT_METHOD_OPEN
+  group = spider.create_group(unrelated=True)
 
   global VISITED_COUNT
   if VISITED_COUNT < 3:

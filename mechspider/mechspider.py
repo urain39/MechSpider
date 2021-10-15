@@ -58,7 +58,7 @@ class MechSpider:
   @classmethod
   # pylint: disable=unused-argument
   def pattern(cls, pattern_):  # WTF?
-    def _(callback):
+    def _(handler):
       assert cls is not MechSpider
       if not hasattr(cls, 'Patterns'):
         cls.Patterns = {}
@@ -66,7 +66,7 @@ class MechSpider:
       nonlocal pattern_
       if isinstance(pattern_, str):
         pattern_ = _re.compile(pattern_)
-      cls.Patterns[pattern_] = callback
+      cls.Patterns[pattern_] = handler
     return _
 
   def _detect_encoding(self, response):
@@ -122,8 +122,8 @@ class MechSpider:
     # pylint: disable=consider-using-dict-items
     for pattern in self.Patterns:
       if pattern.match(url) is not None:
-        self._debug(repr(url) + ' wanted by ' + str(pattern))
-        callback = self.Patterns[pattern]
+        self._debug(repr(url) + ' wanted by ' + repr(pattern))
+        handler = self.Patterns[pattern]
 
         if method is _Group.VISIT_METHOD_OPEN:
           self._debug('visit method is \x27open\x27')
@@ -144,20 +144,22 @@ class MechSpider:
           markup = response.read()
 
         soup = Soup(markup)
-        callback(self, soup)
+        handler(self, soup)
 
         if self.random_wait:
           _time.sleep(self.random_wait_factor * _random())
         break
 
-  def create_group(self):
+  def create_group(self, unrelated=False):
     group = _Group()
+    if unrelated is True:
+      group.method = _Group.VISIT_METHOD_OPEN
     self._visit_groups.append(group)
     return group
 
   def start(self):
     if self.home_page is not None:
-      group = self.create_group()
+      group = self.create_group(unrelated=True)
       group.append(self.home_page)
 
     while self._visit_groups:
@@ -169,7 +171,7 @@ class MechSpider:
       else:
         self._debug('closing ' + repr(self.browser.geturl()))
         self._visit_groups.pop()
-        # Well, the history doesn't public, and it has no `__len__()`
+        # Well, the history doesn't public yet, and it has no `__len__()`
         try:
           self.browser.back()
         except _BrowserStateError:
