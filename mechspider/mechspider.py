@@ -1,11 +1,13 @@
 import re as _re
+import sys as _sys
 import time as _time
-from bs4 import BeautifulSoup as _Soup
-from chardet.universaldetector import UniversalDetector as _UniversalDetector
-from mechanize import Browser as _Browser, Link as _Link
 from random import random as _random, randrange as _randrange
 from urllib.parse import urlparse as _urlparse
-from .exceptions import PropertyMissingError as _PropertyMissingError
+from bs4 import BeautifulSoup as _Soup
+from chardet.universaldetector import UniversalDetector as _UniversalDetector
+from mechanize import Browser as _Browser, BrowserStateError as _BrowserStateError, Link as _Link
+from .exceptions import MechSpiderError as _MechSpiderError
+from .group import Group as _Group
 
 
 _CharsetDetector = _UniversalDetector()
@@ -19,7 +21,8 @@ def Soup(*args, **kwargs):
 # pylint: disable=too-many-instance-attributes
 class MechSpider:
   def __init__(self):
-    self.visit_queue = []
+    self._visit_groups = []
+
     self.browser = _Browser()
     self.browser.set_handle_equiv(True)
     self.browser.set_handle_gzip(True)
@@ -36,10 +39,6 @@ class MechSpider:
     self.home_page = self.HOME_PAGE \
       if hasattr(self, 'HOME_PAGE') else None
 
-    self.max_visit_count = self.MAX_VISIT_COUNT \
-      if hasattr(self, 'MAX_VISIT_COUNT') else 0xffff
-    self.visited_count = 0
-
     self.random_visit = self.RANDOM_VISIT \
       if hasattr(self, 'RANDOM_VISIT') else False
 
@@ -47,6 +46,14 @@ class MechSpider:
       if hasattr(self, 'RANDOM_WAIT') else False
     self.random_wait_factor = self.RANDOM_WAIT_FACTOR \
       if hasattr(self, 'RANDOM_WAIT_FACTOR') else 1
+
+    self.use_chardet = self.USE_CHARDET \
+      if hasattr(self, 'USE_CHARDET') else False
+    self.chardet_line_limit = self.CHARDET_LINE_LIMIT \
+      if hasattr(self, 'CHARDET_LINE_LIMIT') else 128
+
+    self.enable_debug = self.ENABLE_DEBUG \
+      if hasattr(self, 'ENABLE_DEBUG') else False
 
   @classmethod
   # pylint: disable=unused-argument
@@ -61,13 +68,12 @@ class MechSpider:
       cls.Patterns[pattern_] = callback
     return _
 
-  @staticmethod
-  def detect_encoding(response, max_line_count=64):
-    response.seek(0, whence=0)
+  def _detect_encoding(self, response):
+    response.seek(0, 0)
     _CharsetDetector.reset()
 
     line_count = 0
-    while line_count < max_line_count:
+    while line_count < self.chardet_line_limit:
       _CharsetDetector.feed(response.readline())
       if _CharsetDetector.done:
         break
@@ -76,60 +82,94 @@ class MechSpider:
     return _CharsetDetector.result['encoding']
 
   @staticmethod
-  def is_absolute_url(url):
+  def _is_absolute_url(url):
     result = _urlparse(url)
-    return bool(result.scheme) and bool(result.netloc)
+    return result.scheme and result.netloc
 
   @classmethod
-  def url_to_link(cls, url):
-    assert cls.is_absolute_url(url)
-    return _Link(base_url=url, url='', text='', tag='a', attrs=[('href', '')])
+  def _url_to_link(cls, url):
+    assert cls._is_absolute_url(url)
+    return _Link(url, '', '', 'a', [('href', '')])
 
-  def visit(self, link):
-    if isinstance(link, str):
-      link = self.url_to_link(link)
+  @staticmethod
+  def _link_to_url(link):
+    return link.absolute_url
+
+  def _get_index(self, indexable):
+    length = len(indexable)
+    index = length - 1
+    if self.random_visit:
+      index = _randrange(0, length)
+    return index
+
+  def _debug(self, message):
+    if self.enable_debug is True:
+      _sys.stdout.write('DEBUG: ' + message + '\n')
+
+  def _visit(self, url_or_link, method):
+    self._debug('visiting ' + repr(url_or_link))
+
+    url = url_or_link
+    link = url_or_link
+    if isinstance(url_or_link, str):
+      link = self._url_to_link(url_or_link)
+    elif isinstance(url_or_link, _Link):
+      url = self._link_to_url(url_or_link)
+    else:
+      raise _MechSpiderError('Unknown visit object')
 
     # pylint: disable=consider-using-dict-items
     for pattern in self.Patterns:
-      if pattern.match(link.absolute_url) is not None:
+      if pattern.match(url) is not None:
+        self._debug(repr(url) + ' wanted by ' + str(pattern))
         callback = self.Patterns[pattern]
-        # pylint: disable=assignment-from-none
-        response = self.browser.follow_link(link)  # WTF? x2
-        encoding = self.detect_encoding(response)
-        markup = response.get_data().decode(encoding)
-        soup = Soup(markup=markup)
-        callback(soup, self)
+
+        if method is _Group.VISIT_METHOD_OPEN:
+          self._debug('visit method is \x27open\x27')
+          # pylint: disable=assignment-from-none
+          response = self.browser.open(url)  # WTF? x2
+        elif method is _Group.VISIT_METHOD_FOLLOW:
+          self._debug('visit method is \x27follow\x27')
+          # pylint: disable=assignment-from-none
+          response = self.browser.follow_link(link)  # WTF? x3
+        else:
+          raise _MechSpiderError('Unknown visit method')
+
+        if self.use_chardet is True:
+          encoding = self._detect_encoding(response)
+          markup = response.get_data().decode(encoding)
+        else:
+          response.seek(0, 0)
+          markup = response.read()
+
+        soup = Soup(markup)
+        callback(self, soup)
 
         if self.random_wait:
           _time.sleep(self.random_wait_factor * _random())
-
-        self.visited_count += 1
-        if self.visited_count > self.max_visit_count:
-          back_step = _randrange(0, self.max_visit_count)
-          self.browser.back(back_step)
-          self.visited_count -= back_step
         break
 
+  def create_group(self):
+    group = _Group()
+    self._visit_groups.append(group)
+    return group
+
   def start(self):
-    if self.home_page is None:
-      raise _PropertyMissingError('HOME_PAGE missing')
-    link = self.url_to_link(self.home_page)
-    self.visit(link)
+    if self.home_page is not None:
+      group = self.create_group()
+      group.append(self.home_page)
 
-    if self.random_visit:
-      while True:
-        length = len(self.visit_queue)
-        if length < 1:
+    while self._visit_groups:
+      visit_group = self._visit_groups[-1]
+      if visit_group:
+        index = self._get_index(visit_group)
+        url_or_link = visit_group.pop(index)
+        self._visit(url_or_link, method=visit_group.method)
+      else:
+        self._debug('close ' + repr(self.browser.geturl()))
+        self._visit_groups.pop()
+        # Well, the history doesn't public, and it has no `__len__()`
+        try:
+          self.browser.back()
+        except _BrowserStateError:
           break
-
-        index = _randrange(0, length)
-        link = self.visit_queue.pop(index)
-        self.visit(link)
-    else:
-      while True:
-        length = len(self.visit_queue)
-        if length < 1:
-          break
-
-        link = self.visit_queue.pop()
-        self.visit(link)

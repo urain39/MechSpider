@@ -4,7 +4,7 @@ MechSpider
 
 待办列表
 ==========
-- [ ] 多层级浏览（复杂 `Referer` 处理）
+- [x] 多层级浏览（复杂 `Referer` 处理）
 - [ ] 实现类似 Router 的匹配规则
 - [ ] 支持随机 User-Agent
 - [ ] 给模块添加 DocString
