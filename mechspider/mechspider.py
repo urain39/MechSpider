@@ -21,7 +21,7 @@ def Soup(*args, **kwargs):
 
 # pylint: disable=too-many-instance-attributes
 class MechSpider:
-  RE_CHARSET_SEARCHER = _re.compile(r'charset=[\'"]?([^,; ]+)[\'"]?')
+  _RE_CHARSET_SEARCHER = _re.compile(r'charset=[\'"]?([^,; ]+)[\'"]?')
 
   def __init__(self):
     self._visit_groups = []
@@ -89,7 +89,7 @@ class MechSpider:
   def _get_encoding(cls, response, fallback_encoding='utf-8'):
     encoding = fallback_encoding
     for content_type in response.info().getheaders('Content-Type'):
-      matched = cls.RE_CHARSET_SEARCHER.search(content_type)
+      matched = cls._RE_CHARSET_SEARCHER.search(content_type)
       if matched:
         encoding = matched.group(1)
         try:
@@ -140,7 +140,6 @@ class MechSpider:
     for pattern in self.Patterns:
       if pattern.match(url):
         self._debug(repr(url) + ' wanted by ' + repr(pattern))
-
         handler = self.Patterns[pattern]
 
         if method is _Group.VISIT_METHOD_OPEN:
