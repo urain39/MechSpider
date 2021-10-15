@@ -59,7 +59,7 @@ class MechSpider:
   # pylint: disable=unused-argument
   def pattern(cls, pattern_):  # WTF?
     def _(callback):
-      assert issubclass(cls, MechSpider)
+      assert cls is not MechSpider
       if not hasattr(cls, 'Patterns'):
         cls.Patterns = {}
 
