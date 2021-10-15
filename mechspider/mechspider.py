@@ -59,6 +59,7 @@ class MechSpider:
   # pylint: disable=unused-argument
   def pattern(cls, pattern_):  # WTF?
     def _(callback):
+      assert issubclass(cls, MechSpider)
       if not hasattr(cls, 'Patterns'):
         cls.Patterns = {}
 
@@ -84,7 +85,7 @@ class MechSpider:
   @staticmethod
   def _is_absolute_url(url):
     result = _urlparse(url)
-    return result.scheme and result.netloc
+    return bool(result.scheme and result.netloc)
 
   @classmethod
   def _url_to_link(cls, url):
@@ -166,7 +167,7 @@ class MechSpider:
         url_or_link = visit_group.pop(index)
         self._visit(url_or_link, method=visit_group.method)
       else:
-        self._debug('close ' + repr(self.browser.geturl()))
+        self._debug('closing ' + repr(self.browser.geturl()))
         self._visit_groups.pop()
         # Well, the history doesn't public, and it has no `__len__()`
         try:
