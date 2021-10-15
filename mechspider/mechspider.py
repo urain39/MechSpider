@@ -1,3 +1,4 @@
+import codecs as _codecs
 import re as _re
 import sys as _sys
 import time as _time
@@ -20,6 +21,8 @@ def Soup(*args, **kwargs):
 
 # pylint: disable=too-many-instance-attributes
 class MechSpider:
+  RE_CHARSET_SEARCHER = _re.compile(r'charset=[\'"]?([^,; ]+)[\'"]?')
+
   def __init__(self):
     self._visit_groups = []
 
@@ -82,6 +85,20 @@ class MechSpider:
     _CharsetDetector.close()
     return _CharsetDetector.result['encoding']
 
+  @classmethod
+  def _get_encoding(cls, response, fallback_encoding='utf-8'):
+    encoding = fallback_encoding
+    for content_type in response.info().getheaders('Content-Type'):
+      matched = cls.RE_CHARSET_SEARCHER.search(content_type)
+      if matched:
+        encoding = matched.group(1)
+        try:
+          _codecs.lookup(encoding)
+          break
+        except LookupError:
+          pass
+    return encoding
+
   @staticmethod
   def _is_absolute_url(url):
     result = _urlparse(url)
@@ -121,16 +138,17 @@ class MechSpider:
 
     # pylint: disable=consider-using-dict-items
     for pattern in self.Patterns:
-      if pattern.match(url) is not None:
+      if pattern.match(url):
         self._debug(repr(url) + ' wanted by ' + repr(pattern))
+
         handler = self.Patterns[pattern]
 
         if method is _Group.VISIT_METHOD_OPEN:
-          self._debug('visit method is \x27open\x27')
+          self._debug('visit method is \'open\'')
           # pylint: disable=assignment-from-none
           response = self.browser.open(url)  # WTF? x2
         elif method is _Group.VISIT_METHOD_FOLLOW:
-          self._debug('visit method is \x27follow\x27')
+          self._debug('visit method is \'follow\'')
           # pylint: disable=assignment-from-none
           response = self.browser.follow_link(link)  # WTF? x3
         else:
@@ -138,11 +156,11 @@ class MechSpider:
 
         if self.use_chardet is True:
           encoding = self._detect_encoding(response)
-          markup = response.get_data().decode(encoding)
         else:
-          response.seek(0, 0)
-          markup = response.read()
+          encoding = self._get_encoding(response)
+        self._debug('spider thinks encoding is ' + repr(encoding))
 
+        markup = response.get_data().decode(encoding)
         soup = Soup(markup)
         handler(self, soup)
 
@@ -158,7 +176,7 @@ class MechSpider:
     return group
 
   def start(self):
-    if self.home_page is not None:
+    if self.home_page:
       group = self.create_group(unrelated=True)
       group.append(self.home_page)
 
@@ -169,9 +187,16 @@ class MechSpider:
         url_or_link = visit_group.pop(index)
         self._visit(url_or_link, method=visit_group.method)
       else:
-        self._debug('closing ' + repr(self.browser.geturl()))
-        self._visit_groups.pop()
-        # Well, the history doesn't public yet, and it has no `__len__()`
+        if self.browser.request:
+          self._debug('closing ' + repr(self.browser.geturl()))
+          self._visit_groups.pop()
+        else:
+          # Default page which has set by `set_html()`, it has no `request`
+          # property, it means we have already reached the last page
+          break  # And it is often occurrs when your `home_page` mismatched
+
+        # Well, the `history` doesn't public yet, and it has no `__len__()`,
+        # so we just make it simply
         try:
           self.browser.back()
         except _BrowserStateError:
