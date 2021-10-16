@@ -1,4 +1,3 @@
-import codecs as _codecs
 import re as _re
 import sys as _sys
 import time as _time
@@ -22,8 +21,6 @@ def Soup(*args, **kwargs):
 
 # pylint: disable=too-many-instance-attributes
 class MechSpider(ABC):
-  _RE_CHARSET_SEARCHER = _re.compile(r'charset=[\'"]?([^,; ]+)[\'"]?')
-
   def __init__(self):
     self._visit_groups = []
     self._matched_object = None
@@ -86,19 +83,9 @@ class MechSpider(ABC):
     _CharsetDetector.close()
     return _CharsetDetector.result['encoding']
 
-  @classmethod
-  def _get_encoding(cls, response, fallback_encoding='utf-8'):
-    encoding = fallback_encoding
-    for content_type in response.info().getheaders('Content-Type'):
-      matched = cls._RE_CHARSET_SEARCHER.search(content_type)
-      if matched:
-        encoding = matched.group(1)
-        try:
-          _codecs.lookup(encoding)
-          break
-        except LookupError:
-          pass
-    return encoding
+  @staticmethod
+  def _get_encoding(response, default_encoding='utf-8'):
+    return response.info().get_content_charset(default_encoding)
 
   @staticmethod
   def _is_absolute_url(url):
