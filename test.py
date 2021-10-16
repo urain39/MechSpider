@@ -13,11 +13,14 @@ class MySpider(MechSpider):
 
 
 VISITED_COUNT = 0
-@MySpider.pattern(r'.+?httpbin\.org/get')
+@MySpider.pattern(r'(.+?)httpbin\.org/get')
 def _(spider, soup):
+  matched = spider.get_matched()
+  print('scheme: ' + repr(matched.group(1)))
+
   print(soup.text)
   print(spider._visit_groups)
-  group = spider.create_group(unrelated=True)
+  group = spider.create_group(standalone=True)
 
   global VISITED_COUNT
   if VISITED_COUNT < 3:

@@ -2,6 +2,7 @@ import codecs as _codecs
 import re as _re
 import sys as _sys
 import time as _time
+from abc import ABC
 from random import random as _random, randrange as _randrange
 from urllib.parse import urlparse as _urlparse
 from bs4 import BeautifulSoup as _Soup
@@ -20,11 +21,12 @@ def Soup(*args, **kwargs):
 
 
 # pylint: disable=too-many-instance-attributes
-class MechSpider:
+class MechSpider(ABC):
   _RE_CHARSET_SEARCHER = _re.compile(r'charset=[\'"]?([^,; ]+)[\'"]?')
 
   def __init__(self):
     self._visit_groups = []
+    self._matched_object = None
 
     self.browser = _Browser()
     self.browser.set_handle_equiv(True)
@@ -61,15 +63,14 @@ class MechSpider:
   @classmethod
   # pylint: disable=unused-argument
   def pattern(cls, pattern_):  # WTF?
-    def _(handler):
-      assert cls is not MechSpider
-      if not hasattr(cls, 'Patterns'):
-        cls.Patterns = {}
+    if not hasattr(cls, 'patterns'):
+      cls.patterns = {}
 
+    def _(handler):
       nonlocal pattern_
       if isinstance(pattern_, str):
         pattern_ = _re.compile(pattern_)
-      cls.Patterns[pattern_] = handler
+      cls.patterns[pattern_] = handler
     return _
 
   def _detect_encoding(self, response):
@@ -137,10 +138,12 @@ class MechSpider:
       raise _MechSpiderError('Unknown visit object')
 
     # pylint: disable=consider-using-dict-items
-    for pattern in self.Patterns:
-      if pattern.match(url):
+    for pattern in self.patterns:
+      matched = pattern.match(url)
+      if matched:
         self._debug(repr(url) + ' wanted by ' + repr(pattern))
-        handler = self.Patterns[pattern]
+        self._matched_object = matched
+        handler = self.patterns[pattern]
 
         if method is _Group.VISIT_METHOD_OPEN:
           self._debug('visit method is \'open\'')
@@ -162,21 +165,25 @@ class MechSpider:
         markup = response.get_data().decode(encoding)
         soup = Soup(markup)
         handler(self, soup)
+        self._matched_object = None
 
         if self.random_wait:
           _time.sleep(self.random_wait_factor * _random())
         break
 
-  def create_group(self, unrelated=False):
+  def get_matched(self):
+    return self._matched_object
+
+  def create_group(self, standalone=False):
     group = _Group()
-    if unrelated is True:
+    if standalone is True:
       group.method = _Group.VISIT_METHOD_OPEN
     self._visit_groups.append(group)
     return group
 
   def start(self):
     if self.home_page:
-      group = self.create_group(unrelated=True)
+      group = self.create_group(standalone=True)
       group.append(self.home_page)
 
     while self._visit_groups:
@@ -191,7 +198,7 @@ class MechSpider:
           self._visit_groups.pop()
         else:
           # Default page which has set by `set_html()`, it has no `request`
-          # property, it means we have already reached the last page
+          # property, here it means we have already reached the last page
           break  # And it is often occurrs when your `home_page` mismatched
 
         # Well, the `history` doesn't public yet, and it has no `__len__()`,
