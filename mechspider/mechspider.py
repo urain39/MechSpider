@@ -22,6 +22,7 @@ def Soup(*args, **kwargs):
 # pylint: disable=too-many-instance-attributes
 class MechSpider(ABC):
   def __init__(self):
+    self._url_patterns = {}
     self._visit_groups = []
     self._matched_object = None
 
@@ -34,6 +35,10 @@ class MechSpider(ABC):
       self.browser.set_header('User-Agent', self.USER_AGENT)
     if hasattr(self, 'HANDLE_ROBOTS'):
       self.browser.set_handle_robots(self.HANDLE_ROBOTS)
+
+    # Make it more like Browser
+    self.browser.set_header('Accept', 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.9')
+    self.browser.set_header('Accept-Language', 'en-US,en;q=0.5')
 
     # Make first `follow_link()` works
     self.browser.set_html('', url='file:///usr/share/MechSpider/www/mainpage.html')
@@ -57,17 +62,13 @@ class MechSpider(ABC):
     self.enable_debug = self.ENABLE_DEBUG \
       if hasattr(self, 'ENABLE_DEBUG') else False
 
-  @classmethod
   # pylint: disable=unused-argument
-  def pattern(cls, pattern_):  # WTF?
-    if not hasattr(cls, 'patterns'):
-      cls.patterns = {}
-
+  def pattern(self, pattern_):  # WTF?
     def _(handler):
       nonlocal pattern_
       if isinstance(pattern_, str):
         pattern_ = _re.compile(pattern_)
-      cls.patterns[pattern_] = handler
+      self._url_patterns[pattern_] = handler
     return _
 
   def _detect_encoding(self, response):
@@ -125,12 +126,12 @@ class MechSpider(ABC):
       raise _MechSpiderError('Unknown visit object')
 
     # pylint: disable=consider-using-dict-items
-    for pattern in self.patterns:
+    for pattern in self._url_patterns:
       matched = pattern.match(url)
       if matched:
         self._debug(repr(url) + ' wanted by ' + repr(pattern))
         self._matched_object = matched
-        handler = self.patterns[pattern]
+        handler = self._url_patterns[pattern]
 
         if method is _Group.VISIT_METHOD_OPEN:
           self._debug('visit method is \'open\'')

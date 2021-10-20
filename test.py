@@ -1,5 +1,6 @@
 from mechspider import MechSpider
 
+
 class MySpider(MechSpider):
   USER_AGENT = 'Mozilla/5.0 (X11; U; Linux X86_64; en-US) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/72.0.3626.105 Safari/537.36'
   HANDLE_ROBOTS = False
@@ -12,8 +13,11 @@ class MySpider(MechSpider):
   ENABLE_DEBUG = True
 
 
+ms = MySpider()
+
+
 VISITED_COUNT = 0
-@MySpider.pattern(r'(.+?)httpbin\.org/get')
+@ms.pattern(r'(.+?)httpbin\.org/get')
 def _(spider, soup):
   matched = spider.get_matched()
   print('scheme: ' + repr(matched.group(1)))
@@ -29,7 +33,7 @@ def _(spider, soup):
   VISITED_COUNT += 1
 
 
-ms = MySpider()
+
 ms.start()
 
 
